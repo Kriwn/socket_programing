@@ -2,17 +2,25 @@
 
 import socket
 import os
+import time
 
 CHUNK_SIZE = 1024  # 1KB
 SAVE_DIR = "server_files"
 
+def send_status(connection_socket, code, message):
+    status = f"{code} {message}".encode()
+    connection_socket.sendall(status)
+
 def save_file(connection_socket, file_name):
     if not os.path.exists(SAVE_DIR):
         os.makedirs(SAVE_DIR)
+
     with open(os.path.join(SAVE_DIR, file_name), 'wb') as file:
         while True:
             chunk = connection_socket.recv(CHUNK_SIZE)
-            if chunk == b'END':
+            if b'END' in chunk:
+                file.write(chunk.replace(b'END', b''))  # Write the part before 'END'
+                send_status(connection_socket, 200, "File received successfully")
                 break
             file.write(chunk)
 
@@ -25,9 +33,11 @@ def send_file(connection_socket, file_name):
                 if not chunk:
                     break
                 connection_socket.sendall(chunk)
+        time.sleep(5)
         connection_socket.sendall(b'END')  # Indicate end of file transfer
+        send_status(connection_socket, 200, "File sent successfully")
     else:
-        connection_socket.sendall(b'ERROR: File not found')
+        send_status(connection_socket, 404, "File not found")
 
 def server():
     port = 4242
@@ -51,6 +61,7 @@ def server():
                 _, file_name = command.split()
                 send_file(connection_socket, file_name)
             elif command == "exit":
+                send_status(connection_socket, 200, "Connection closed")
                 break
 
         connection_socket.close()
